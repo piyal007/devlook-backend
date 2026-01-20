@@ -1,0 +1,1 @@
+Add a category filter (business, tech, sports) and a date range filter, language, sources, statusAl filtration needs to be from backend. All fetched news should be stored in database
