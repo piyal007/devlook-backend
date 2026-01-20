@@ -13,6 +13,7 @@ app.use(cors({
     'http://localhost:3000',
     'http://localhost:3001', 
     'https://devlook-backend.vercel.app',
+    'https://developer-look-murex.vercel.app',
     /\.vercel\.app$/
   ],
   credentials: true
@@ -89,12 +90,15 @@ async function fetchAndStoreNews(country, category = null, language = "en") {
       const operations = articles.map((article) => ({
         updateOne: {
           filter: { link: article.link },
-          update: { $set: article },
+          update: { 
+            $set: article,
+            $setOnInsert: { createdAt: new Date() }
+          },
           upsert: true,
         },
       }));
 
-      const result = await newsCollection.bulkWrite(operations);
+      const result = await newsCollection.bulkWrite(operations, { ordered: false });
       console.log(
         `✅ Stored ${result.upsertedCount} new articles, updated ${result.modifiedCount}`
       );
