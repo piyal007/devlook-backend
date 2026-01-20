@@ -8,15 +8,28 @@ const app = express();
 const port = 5000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:3001', 
+    'https://devlook-backend.vercel.app',
+    /\.vercel\.app$/
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // MongoDB connection
 const client = new MongoClient(process.env.MONGODB_URI);
 let db;
 let newsCollection;
+let isConnected = false;
 
 async function connectDB() {
+  if (isConnected) {
+    return;
+  }
+  
   try {
     await client.connect();
     console.log("✅ Connected to MongoDB successfully!");
@@ -24,20 +37,28 @@ async function connectDB() {
     db = client.db("devlook");
     newsCollection = db.collection("news");
     
-    // Create indexes for better query performance
-    await newsCollection.createIndex({ pubDate: -1 });
-    await newsCollection.createIndex({ country: 1 });
-    await newsCollection.createIndex({ category: 1 });
-    await newsCollection.createIndex({ link: 1 }, { unique: true });
+    // Create indexes only once (skip in serverless to avoid timeout)
+    if (process.env.NODE_ENV !== 'production') {
+      await newsCollection.createIndex({ pubDate: -1 });
+      await newsCollection.createIndex({ country: 1 });
+      await newsCollection.createIndex({ category: 1 });
+      await newsCollection.createIndex({ link: 1 }, { unique: true });
+      console.log("✅ Database and indexes ready!");
+    } else {
+      console.log("✅ Database ready!");
+    }
     
-    console.log("✅ Database and indexes ready!");
+    isConnected = true;
   } catch (error) {
     console.error("❌ MongoDB connection error:", error);
-    process.exit(1);
+    throw error;
   }
 }
 
-connectDB();
+// Connect to database on startup (for local dev)
+if (process.env.NODE_ENV !== 'production') {
+  connectDB();
+}
 
 // Fetch and store news from API
 async function fetchAndStoreNews(country, category = null, language = "en") {
@@ -90,6 +111,9 @@ async function fetchAndStoreNews(country, category = null, language = "en") {
 // Get news with filters
 app.get("/api/news", async (req, res) => {
   try {
+    // Ensure DB connection for serverless
+    await connectDB();
+    
     const {
       country,
       category,
@@ -161,6 +185,9 @@ app.get("/api/news", async (req, res) => {
 // Fetch fresh news and store in DB
 app.post("/api/news/fetch", async (req, res) => {
   try {
+    // Ensure DB connection for serverless
+    await connectDB();
+    
     const { country, category, language } = req.body;
 
     if (!country) {
@@ -185,6 +212,9 @@ app.post("/api/news/fetch", async (req, res) => {
 // Get available filters
 app.get("/api/filters", async (req, res) => {
   try {
+    // Ensure DB connection for serverless
+    await connectDB();
+    
     const categories = await newsCollection.distinct("category");
     const countries = await newsCollection.distinct("country");
     const languages = await newsCollection.distinct("language");
@@ -232,3 +262,6 @@ process.on("SIGINT", async () => {
 app.listen(port, () => {
   console.log(`🚀 Server listening on port ${port}`);
 });
+
+// Export for Vercel serverless
+module.exports = app;
